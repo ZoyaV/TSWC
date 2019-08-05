@@ -14,6 +14,12 @@ class ClassK():
     def __init__(self, p, class_name = -1):
         self.p = p
         self.class_name = class_name
+        
+    def __getitem__(self, key):
+        return self.p[key]
+    
+    def __len__(self):
+        return len(self.p)
     
     @property
     def patterns(self):
@@ -22,13 +28,16 @@ class ClassK():
     @property
     def closest(self):
         closes = 1    
+        if len(self.p) == 0:
+            return 100
+        closes = []
         for p_template in self.p[:-1]:
             for p in self.p[:-1]:
-                closes += distance.euclidean(p_template ,p)
-        return closes/len(self.p)
+                closes.append(distance.euclidean(p_template ,p))
+        return np.median(np.asarray(closes))/ (len(self.p)**2)
     
     def plot(self, count = None, color = 'b', save = False):
-        if count!=None:
+        if count!=None and  len(self.p) >= count :
             count = count
         else:
             count = len(self.p)
@@ -58,13 +67,12 @@ class Clusters(object):
     def __getitem__(self, key):
         
         mask = self.labels == key
-        #print(len(self.data), len(self.labels ))
-        indx = np.where(mask)[0]    
+        indx = np.where(mask)[0]  
         count = len(indx)//self.recunstruct
         patterns = []
-        
-        for i in range(count): 
-            pattern = list(self.data[indx[i*self.recunstruct:(i+1)*self.recunstruct]])
+        for i in range(count-1):             
+            part = indx[i*self.recunstruct:(i+1)*self.recunstruct]
+            pattern = list(self.data[part])
             patterns.append(pattern)
       #  print("PPP: ", patterns)
         return ClassK(patterns, key)
@@ -75,10 +83,31 @@ class Clusters(object):
         patterns = []
         for dclass in classes:
             pattern = self.__getitem__(dclass)
-            patterns.append(pattern)
+            if len(pattern)>1:
+                patterns.append(pattern)
         return patterns            
     
     @property
     def sorted_patterns(self):  
         return sorted(self.patterns, key  = lambda p: p.closest)
+    
+    def pattern_plot(self):        
+        labels  = list(set(self.labels))
+        count_of_labels = len(labels)
+        plt.figure(figsize = (24,4))
+        for key in labels:
+            mask = self.labels == key
+            indx = np.where(mask)[0]  
+            count = len(indx)//self.recunstruct
+            
+            t = key/count_of_labels
+            c = [t,
+                 t,
+                 t]
+
+            for i in range(count-1):             
+                part = indx[i*self.recunstruct:(i+1)*self.recunstruct]
+                plt.plot(part, self.data[part], color = c)
+        return
+            
     
