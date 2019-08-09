@@ -14,18 +14,26 @@ from sklearn.cluster import KMeans
 import sys
 sys.path.append('../ikmeans')
 
+from distations import centr_dist
 from clusters import Clusters
 
-def centnters_update(centers):
+def centnters_update(centers, split_mask = None):
     new_centers = []
-    for c in centers:
-        new_centers+=[c,c]
+    if split_mask is not None:
+        for c,split in zip(centers, split_mask):
+            if split:
+                new_centers+=[c,c]
+            else:
+                new_centers+=[c]
+    else:   
+        for c in centers:
+            new_centers+=[c,c]    
     return np.asarray(new_centers)
 
 class IKMeans():
     
     filter_type = 'haar'
-    def __init__(self, data, k = 3, start_lvl = None, end_lvl = 1):       
+    def __init__(self, data, k = 3, start_lvl = None, end_lvl = 1, union_level = False):       
         self.max_lvl = pywt.dwt_max_level(data_len= len(data),
                                              filter_len= self.filter_type)
         
@@ -41,6 +49,7 @@ class IKMeans():
         self.recunstruct = 2**self.curr_lvl 
         self.k = k
         self.clasters = None
+        self.union_level = union_level
         
         if start_lvl is not None:
             
@@ -59,12 +68,44 @@ class IKMeans():
         self.recunstruct = 2**self.curr_lvl
         self.k*=2
         return
+    def __claster_dencity(self, i):
+        t = self.start_lvl - self.curr_lvl 
+        mask = np.where(self.labels == i)
+        X = np.asarray(list(zip(self.cur_cA, self.cD[t])))        
+        claster = X[mask]
+        mean_d =np.var(claster)
+        return mean_d
     
+    def __clasters_dencity(self):
+        max_claster_idx = max(list(set(self.labels))) + 1
+        clater_idxs = list(set(self.labels))
+        dincities = [0] * max_claster_idx
+        for i in clater_idxs:
+#            print(i)
+#            print(dincities[i])
+            dincities[i] = self.__claster_dencity(i)
+        return np.asarray(dincities)
+    
+    @property
+    def __split_mask(self):
+        dincities = self.__clasters_dencity()
+        split_mask = np.zeros_like(dincities)
+        threshold = np.mean(dincities)
+        
+        for i,d in enumerate(dincities):
+            split_mask[i] = d > threshold
+        return split_mask     
+            
+            
     def fit(self):
         i = self.start_lvl - self.curr_lvl
         X = np.asarray(list(zip(self.cur_cA, self.cD[i])))
         if self.centers is not None:
-            self.centers = centnters_update(self.centers)
+            if self.union_level:
+                self.centers = centnters_update(self.centers, self.__split_mask)
+            else:
+                self.centers = centnters_update(self.centers)
+            self.k = len(self.centers)
             kmeans = KMeans(n_clusters= self.k, init = self.centers)
         else:
             kmeans = KMeans(n_clusters= self.k)     
@@ -76,7 +117,8 @@ class IKMeans():
         
         return Clusters(self.data, self.labels, self.recunstruct)
     
-    def plot_clusters(self):
+    def plot_clusters(self, show_number = True):
+        plt.figure(figsize = (10,10))
         i = self.start_lvl - self.curr_lvl
         plt.scatter(self.cur_cA, self.cD[i], c=self.labels, s=10, cmap='viridis')
         centers = self.centers
@@ -84,4 +126,7 @@ class IKMeans():
         plt.title("Decomposition level = %d, clasters = %d"%(self.curr_lvl, self.k))
         plt.xlabel('Aproximation')
         plt.ylabel('Details')
+        if show_number:
+            for i,center in enumerate(centers):
+                plt.text(*center, str(i), fontsize=12)
         plt.show();
